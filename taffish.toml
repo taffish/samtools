@@ -6,6 +6,12 @@ release = 1
 license = "Apache-2.0"
 main = "src/main.taf"
 
+[meta]
+domain = "bio"
+categories = ["genomics", "alignment", "sam-bam-cram"]
+keywords = ["sam", "bam", "cram", "alignment", "htslib", "bgzip", "tabix", "ngs"]
+description = "Toolkit for reading, writing, editing, indexing, viewing, and summarizing SAM/BAM/CRAM alignment files."
+
 [repository]
 url = "https://github.com/taffish/samtools"
 
@@ -24,6 +30,10 @@ build_platforms = "linux/amd64,linux/arm64"
 [upstream]
 type = "github"
 repo = "samtools/samtools"
+license = "MIT/Expat"
+citation = "Danecek et al. 2021"
+doi = "10.1093/gigascience/giab008"
+pmid = "33590861"
 watch = "tags"
 
 [smoke]
