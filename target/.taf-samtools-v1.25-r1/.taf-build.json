@@ -1,0 +1,6 @@
+{
+  "artifact": "taf-samtools-v1.25-r1",
+  "schema": "taffish.build/v1",
+  "source_sha256": "1c0fbf5377ad6171dcbed163d19e53aef8097867666a0f365240dd42f7f1e469",
+  "wrapper_sha256": "48fa8bea9a75e7cdab398b03c48a8bf081dfdca53d325bdaccd083e7b3342a05"
+}

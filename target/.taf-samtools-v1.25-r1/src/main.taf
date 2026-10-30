@@ -1,0 +1,2 @@
+<taf-app:container:ghcr.io/taffish/samtools:1.25-r1>
+samtools ::*ARGV*::

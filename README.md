@@ -7,13 +7,13 @@ Package identity:
 - name: `samtools`
 - command: `taf-samtools`
 - kind: `tool`
-- version: `1.24-r1`
+- version: `1.25-r1`
 - TAFFISH app license: Apache-2.0
 - upstream: <https://github.com/samtools/samtools>
 
 ## What This App Packages
 
-This release builds SAMtools 1.24 and HTSlib 1.24 from their official release
+This release builds SAMtools 1.25 and HTSlib 1.25 from their official release
 tarballs. The default command is `samtools`; TAFFISH command mode also exposes
 the companion programs and scripts installed by the two upstream projects.
 
@@ -21,8 +21,8 @@ Verified source archives:
 
 | Source | SHA-256 |
 | --- | --- |
-| `samtools-1.24.tar.bz2` | `89b2a440123eeaa400392ce1736e7d60ce9041843027d76819753c5a8246bfdd` |
-| `htslib-1.24.tar.bz2` | `28a8de191381c7a97a35675ceac76fa1ea95e7b678d6a2e9d600a7874e4077de` |
+| `samtools-1.25.tar.bz2` | `8bbd2b3cb447953149a74ab0b00e3ec4e88a789a27b8373a31fa6b5b2dee02b1` |
+| `htslib-1.25.tar.bz2` | `158c271e4e2986bb2dd11283b640edc10c56695b293df77a109ce99480303730` |
 
 ## Scope
 
@@ -30,7 +30,9 @@ This app supports the upstream SAMtools command suite for SAM, BAM, and CRAM,
 including conversion, filtering, sorting, indexing, validation, statistics,
 coverage, pileup, duplicate marking, FASTA/FASTQ conversion, and terminal
 viewing. It also includes HTSlib's BGZF, tabix, file-identification,
-annotation, and reference-cache tools.
+annotation, and local reference-cache population tools. The installed HTSlib
+`ref-cache` HTTP proxy is retained upstream content, not a tested service contract.
+No independent server, noVNC desktop or external viewer is added.
 
 This app does not:
 
@@ -65,7 +67,7 @@ ImageMagick. ImageMagick is required by the optional
 
 ```sh
 taf update
-taf install samtools 1.24-r1
+taf install samtools 1.25-r1
 ```
 
 For an unpublished local checkout:
@@ -120,6 +122,16 @@ taf-samtools -- --help
 taf-samtools -- --version
 ```
 
+For command-mode arguments containing spaces, retain literal quotes through the
+TAFFISH shell-command layer (the outer double quotes are consumed by your shell):
+
+```sh
+taf-samtools samtools view -b -o "'out file.bam'" "'input file.sam'"
+```
+
+Do not use untrusted text as a shell command. The wrapper does not change upstream
+argument or file-format semantics.
+
 ## Inputs
 
 | Input | Meaning | Notes |
@@ -141,17 +153,18 @@ and TAFFISH pipe mode are supported. Index commands create `.bai`, `.csi`,
 `.crai`, or `.fai` sidecars. Plot helpers write multiple image files under the
 requested output prefix or directory.
 
-## SAMtools 1.24 Notes
+## SAMtools 1.25 Notes
 
-- `view --subsample` now derives its default seed from the input header instead
-  of using zero. Set an explicit seed when exact cross-run sampling identity is
-  required.
-- `markdup` adds `--move-umi-to-tag`.
-- `stats` uses the corrected `--customized-index` option name.
-- `fixmate` now fills mate information on supplementary alignments.
-- checksum merging is compatible with biobambam2 output.
+- Checksum output now identifies the corrected algorithm as format 2.0.
+  Version 1.24 used the corrected mate checksum but labelled it 1.0; follow
+  upstream guidance before comparing old checksums. `--version-1` is available
+  for explicitly requested legacy compatibility.
+- `mpileup --output-extra ENDPOS` adds alignment-end positions.
+- `import --allow-empty` explicitly accepts empty FASTQ input; several markdup, stats and CRAM error
+  handling issues are fixed upstream. The packaging does not patch algorithms.
 
-See the upstream release notes for the complete list of changes.
+See the [official release](https://github.com/samtools/samtools/releases/tag/1.25)
+for the full changes. The matching HTSlib is also 1.25.
 
 ## Resources, References, and Platform
 
@@ -160,14 +173,89 @@ depend on file size and command. Sorting and merging large files may require
 substantial temporary disk; control those locations with the relevant upstream
 options.
 
-CRAM decoding may require the matching reference. No reference is bundled.
-Pass an accessible reference with the appropriate SAMtools option or configure
-an HTSlib reference cache yourself. `seq_cache_populate.py` and
-`seq_cache_populate.pl` are included to populate such caches from local FASTA
-files.
+CRAM decoding may need its exact reference. This is a user/project-specific
+input, not a SAMtools-versioned database or model catalog. The image does not
+select a species/build, download a genome, or auto-discover a database root.
+A download manager would not know the user's required reference identity or
+license. Keep an explicit source/version/SHA256 record for your FASTA. The
+reference owner's license, not SAMtools' software license, controls sharing.
 
-`samtools tview` is interactive and needs a usable terminal. The image carries
-curses support, but terminal allocation remains a backend/runtime concern.
+### Prepare once, share read-only
+
+An administrator may prepare `reference.fa` and its `.fai` in a new staging
+folder under a versioned location such as
+`/opt/taffish/references/samtools/REFERENCE-ID/` or
+`/usr/local/share/taffish/references/samtools/REFERENCE-ID/`. A personal
+alternative is `~/.local/share/taffish/references/samtools/REFERENCE-ID/`.
+Run `taf-samtools samtools faidx reference.fa` in that writable staging
+folder; verify identity and indexes, then grant intended readers directory
+traversal (normally 0755) and file reads (normally 0644). Do not recursively
+change ownership of an existing unrelated library. Publish the prepared folder
+only after validation; ordinary analysis users do not need write access.
+
+From the analysis working directory, using a prepared directory whose path has
+no spaces:
+
+```sh
+REFS=/opt/taffish/references/samtools/REFERENCE-ID
+TAFFISH_DOCKER_RUN_ARGS="--network none -v $REFS:/refs:ro" TAFFISH_CONTAINER_BACKEND=docker taf-samtools samtools view -T /refs/reference.fa -b -o decoded.bam input.cram
+TAFFISH_PODMAN_RUN_ARGS="--network none -v $REFS:/refs:ro" TAFFISH_CONTAINER_BACKEND=podman taf-samtools samtools view -T /refs/reference.fa -b -o decoded.bam input.cram
+TAFFISH_APPTAINER_RUN_ARGS="--cleanenv --containall --no-mount bind-paths --net --network none --bind $REFS:/refs:ro" TAFFISH_CONTAINER_BACKEND=apptainer taf-samtools samtools view -T /refs/reference.fa -b -o decoded.bam input.cram
+```
+
+For a spaced bind root, retain quotes inside the runtime argument string, for
+example `TAFFISH_DOCKER_RUN_ARGS="-v '$REFS:/refs:ro'"` (Podman likewise), or
+`TAFFISH_APPTAINER_RUN_ARGS="--bind '$REFS:/refs:ro'"`. Resolve any intentional
+symlink to a trusted prepared directory first. Indexing an unprepared read-only
+FASTA can fail because its adjacent index cannot be written; prepare the index
+once instead of making the shared library writable.
+
+### Optional sequence cache
+
+`seq_cache_populate.py -root ref-cache reference.fa` derives a content-addressed
+cache from a supplied local FASTA. It does not download genomes. Use a fresh
+staging directory, validate the resulting sequence digests and a decoding path,
+and only then make the completed snapshot available read-only. The raw upstream
+population tools are not a transactional catalog installer and do not promise
+rollback or repair of arbitrary old caches; retain original FASTA and recovery
+copies. A simple explicit `-T` reference remains the recommended path.
+
+To reuse a prepared cache, bind it as `/refs:ro` using the appropriate backend
+above and run:
+
+```sh
+taf-samtools env REF_PATH=/refs/%2s/%2s/%s REF_CACHE=/refs/%2s/%2s/%s samtools view -b -o decoded.bam input.cram
+```
+
+Set backend arguments on the same invocation. All required sequences must be
+present. Without an explicit reference or complete local cache, upstream HTSlib
+can try CRAM header URLs/public reference services. This online upstream behavior
+is not a reproducible download contract: use explicit local inputs and disabled
+networking for offline work. Missing/wrong references must not be ignored.
+
+### Terminal and static viewers
+
+`samtools tview -d T sorted.bam reference.fa` prints a noninteractive text view;
+`-d H` emits HTML. For interactive curses, add `-t` to Docker/Podman runtime
+arguments and run `taf-samtools env TERM=xterm samtools tview sorted.bam reference.fa`;
+Apptainer uses the caller's terminal without Docker's `-t`. Press `q` to exit.
+
+`plot-bamstats -p plots/ stats.txt` creates `plots/index.html` and linked PNGs.
+After creating a separate `amplicon/` output directory,
+`plot-ampliconstats -thumbnails amplicon/amp amplicon.stats` creates
+`amplicon/index.html` plus plots/thumbnails. These are upstream-generated static pages, not a new TAFFISH
+renderer; no ports, browser service, authentication or TLS are involved. Copy the
+complete output bundle, not just its HTML. Prefer a new **relative prefix without
+spaces or shell metacharacters**: the upstream plotting scripts construct some
+shell commands internally. A working directory with spaces is supported when
+the relative plotting prefix is safe. Reusing the prefix overwrites its files.
+Native report layouts are fixed-width; narrow screens may require scrolling.
+Reports can expose sample names and paths: share them according to data policy.
+
+The official release provides curses `tview`, its text/HTML forms and the two
+plot helpers. Its install files do not declare a separate mandatory GUI package;
+BCFtools, iRODS and Crypt4GH extensions remain separately maintained tools/plugins.
+No external desktop or browser service is needed for the bundled viewers.
 
 ## Boundaries
 
@@ -186,24 +274,49 @@ detect Crypt4GH input and report that the separately maintained
 SAMtools or HTSlib release tarballs and is not bundled in this app. Decrypt or
 convert such input before use, or package the optional plugin separately.
 
-## Testing
+## Build and validation
 
-Build-time checks are deliberately QEMU-friendly: exact versions, stable normal
-help markers, command discovery, runtime libraries, and a tiny SAM-to-BAM path.
-They do not invoke terminal-width-sensitive full help or plotting/rendering.
+Both declared platforms are native Linux builds: `linux/amd64` and
+`linux/arm64`. Build-time checks are deliberately lightweight: exact versions
+with checked exit codes and one tiny SAM-to-BAM path. Plotting, full command
+help and terminal behavior are checked at runtime, not used as fragile build
+requirements. Official archives are SHA256-verified; Debian base tags and apt
+repositories remain mutable. Checksums detect source drift but cannot guarantee
+future availability or bit-for-bit rebuilds of unpinned dependency packages.
 
-Independent index smoke cases cover:
+The packaging test helper runs independent offline modes for identity, help,
+BAM processing, 1.25 changes, HTSlib tools, both plots, reference cache reuse,
+read simulation, dependencies and notices. The real wrapper is tested separately
+for argument boundaries, host outputs, ordinary-user read-only references,
+missing inputs, upstream reports and terminal rendering.
 
-- SAMtools 1.24 and HTSlib 1.24 identity
-- 1.24-specific `markdup` and `stats` options
-- tiny BAM conversion, sorting, indexing, validation, and statistics
-- `bgzip`, `tabix`, `htsfile`, and `annot-tsv`
-- real `plot-bamstats` output and ImageMagick image conversion
-- Python reference-cache population and `wgsim` FASTQ generation
-- installed helper discovery, runtime dependencies, and license notices
+Current native validation (2026-10-29):
 
-These checks validate packaging and minimal execution, not full scientific
-correctness on production datasets or every option combination.
+| Host / platform | Backends | Scope |
+| --- | --- | --- |
+| xjp / Linux amd64 | Docker, Podman, Apptainer | Offline exact smoke, real wrapper, shared references/cache, reports, terminal quit and permissions |
+| Local / Linux ARM64 VMs | Docker, Podman | Same runtime scope; Docker also builds the native image |
+
+Docker/Podman tests include normal, read-only-root and nonzero-UID/no-capability
+runs. Apptainer uses a real read-only SIF from the same amd64 OCI image with a
+clean, contained, offline environment. Shared synthetic FASTA/cache tests cover
+read-only reuse, rejected writes, wrong/missing references, MD5 rejection of a
+corrupt cache, explicit recovery and repeated population. These demonstrate the
+mechanism, not a full production reference installation or license approval.
+
+Native uncompressed image sizes are 312,017,743 bytes (amd64) and 324,408,291 bytes
+(ARM64), not registry download sizes. The SAMtools/HTSlib tree occupies about
+26/24 MiB respectively. Build sources, headers, static libraries and apt lists
+are absent; shared libraries, fonts and plotting dependencies are intentionally
+retained. BuildKit 0.33.1 was used with app-root context and the canonical
+Dockerfile path. The Action is an unchanged copy of the current `taf new` template.
+
+Both native report generators, image links, overwrite behavior and `taf run`
+were exercised. The maintainer directly opened the final offline report files
+and confirmed that their display and links work correctly.
+Public CI, GHCR and Index results are only available after publication. Tests
+use small synthetic inputs and do not establish scientific correctness for
+production datasets or every upstream option.
 
 ## License and Citation
 
@@ -219,5 +332,5 @@ Please cite:
 Upstream documentation:
 
 - <https://www.htslib.org/doc/samtools.html>
-- <https://github.com/samtools/samtools/releases/tag/1.24>
-- <https://github.com/samtools/htslib/releases/tag/1.24>
+- <https://github.com/samtools/samtools/releases/tag/1.25>
+- <https://github.com/samtools/htslib/releases/tag/1.25>
